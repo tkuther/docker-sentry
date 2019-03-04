@@ -73,13 +73,11 @@ ARG SENTRY_BUILD=master
 ENV SENTRY_BUILD $SENTRY_BUILD
 
 RUN [ "$SENTRY_BUILD" != '' ] \
-    # Install node to build assets
     && export NODE_VERSION=8.10.0 \
     && export YARN_VERSION=1.13.0 \
     && export GNUPGHOME="$(mktemp -d)" \
     && export NPM_CONFIG_CACHE="$(mktemp -d)" \
     && export YARN_CACHE_FOLDER="$(mktemp -d)" \
-    # gpg keys listed at https://github.com/nodejs/node
     && set -ex \
     && for key in \
       94AE36675C464D64BAFA68DD7434390BDBE9B9C5 \
@@ -108,18 +106,14 @@ RUN [ "$SENTRY_BUILD" != '' ] \
     && tar -xzf "node-v$NODE_VERSION-linux-x64.tar.gz" -C /usr/local/node --strip-components=1 \
     && rm -r "$GNUPGHOME" "node-v$NODE_VERSION-linux-x64.tar.gz" SHASUMS256.txt.asc \
     && npm install -g yarn@$YARN_VERSION \
-
     && mkdir -p /usr/src/sentry \
     && cd /usr/src/sentry \
     && wget -qO - "https://github.com/getsentry/sentry/archive/${SENTRY_BUILD}.tar.gz" | tar -xzf - --strip-components=1 \
-    && python setup.py bdist_wheel \
-
-    # Now remove node since it's not needed anymore in the final container
+    && python setup.py -v bdist_wheel \
+    && pip install dist/*.whl \
+    && pip install git+https://github.com/getsentry/sentry-plugins.git \
     && rm -r "$NPM_CONFIG_CACHE" "$YARN_CACHE_FOLDER" \
     && rm -rf /usr/local/node \
-
-    && pip install dist/*.whl \
-
     && apt-get purge -y --auto-remove make g++ wget \
     && rm -rf /usr/src/sentry
 
