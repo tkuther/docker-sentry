@@ -110,6 +110,8 @@ RUN [ "$SENTRY_BUILD" != '' ] \
     && cd /usr/src/sentry \
     && wget -qO - "https://github.com/getsentry/sentry/archive/${SENTRY_BUILD}.tar.gz" | tar -xzf - --strip-components=1 \
     && wget -qO - https://patch-diff.githubusercontent.com/raw/getsentry/sentry/pull/12220.patch | patch -p1 \
+    && sed -i '/jira/d' src/sentry/plugins/__init__.py \
+    && sed -i '/slack/d' src/sentry/plugins/__init__.py \
     && python setup.py -v bdist_wheel \
     && pip install dist/*.whl \
     && pip install git+https://github.com/getsentry/sentry-plugins.git \
