@@ -97,7 +97,7 @@ RUN [ "$SENTRY_BUILD" != '' ] \
       gpg --batch --keyserver hkp://pgp.mit.edu:80 --recv-keys "$key" ; \
     done \
     && mkdir -p /usr/local/node && PATH=/usr/local/node/bin:$PATH \
-    && apt-get update && apt-get install -y --no-install-recommends make g++ wget \
+    && apt-get update && apt-get install -y --no-install-recommends make g++ wget patch \
     && rm -rf /var/lib/apt/lists/* \
     && wget "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.gz" \
     && wget "https://nodejs.org/dist/v$NODE_VERSION/SHASUMS256.txt.asc" \
@@ -109,12 +109,13 @@ RUN [ "$SENTRY_BUILD" != '' ] \
     && mkdir -p /usr/src/sentry \
     && cd /usr/src/sentry \
     && wget -qO - "https://github.com/getsentry/sentry/archive/${SENTRY_BUILD}.tar.gz" | tar -xzf - --strip-components=1 \
+    && wget -qO - https://patch-diff.githubusercontent.com/raw/getsentry/sentry/pull/12220.patch | patch -p1 \
     && python setup.py -v bdist_wheel \
     && pip install dist/*.whl \
     && pip install git+https://github.com/getsentry/sentry-plugins.git \
     && rm -r "$NPM_CONFIG_CACHE" "$YARN_CACHE_FOLDER" \
     && rm -rf /usr/local/node \
-    && apt-get purge -y --auto-remove make g++ wget \
+    && apt-get purge -y --auto-remove make g++ wget patch \
     && rm -rf /usr/src/sentry
 
 ENV SENTRY_CONF=/etc/sentry \
