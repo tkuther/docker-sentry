@@ -1,5 +1,5 @@
 # Build from any git sha by passing `--build-arg SENTRY_BUILD=<sha>`
-FROM python:2.7.15-slim-jessie
+FROM python:2.7.16-slim-stretch
 
 # add our user and group first to make sure their IDs get assigned consistently
 RUN groupadd -r sentry && useradd -r -m -g sentry sentry
@@ -25,7 +25,12 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK on
 # grab gosu for easy step-down from root
 RUN set -x \
     && export GOSU_VERSION=1.11 \
-    && apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/* \
+    && fetchDeps=" \
+        dirmngr \
+        gnupg \
+        wget \
+    " \
+    && apt-get update && apt-get install -y --no-install-recommends $fetchDeps && rm -rf /var/lib/apt/lists/* \
     && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$(dpkg --print-architecture)" \
     && wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$(dpkg --print-architecture).asc" \
     && export GNUPGHOME="$(mktemp -d)" \
@@ -37,15 +42,21 @@ RUN set -x \
       gpg --batch --keyserver hkp://pgp.mit.edu:80 --recv-keys "$key" ; \
     done \
     && gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu \
+    && gpgconf --kill all \
     && rm -r "$GNUPGHOME" /usr/local/bin/gosu.asc \
     && chmod +x /usr/local/bin/gosu \
     && gosu nobody true \
-    && apt-get purge -y --auto-remove wget
+    && apt-get purge -y --auto-remove $fetchDeps
 
 # grab tini for signal processing and zombie killing
 RUN set -x \
     && export TINI_VERSION=0.18.0 \
-    && apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/* \
+    && fetchDeps=" \
+        dirmngr \
+        gnupg \
+        wget \
+    " \
+    && apt-get update && apt-get install -y --no-install-recommends $fetchDeps && rm -rf /var/lib/apt/lists/* \
     && wget -O /usr/local/bin/tini "https://github.com/krallin/tini/releases/download/v$TINI_VERSION/tini" \
     && wget -O /usr/local/bin/tini.asc "https://github.com/krallin/tini/releases/download/v$TINI_VERSION/tini.asc" \
     && export GNUPGHOME="$(mktemp -d)" \
@@ -57,27 +68,40 @@ RUN set -x \
       gpg --batch --keyserver hkp://pgp.mit.edu:80 --recv-keys "$key" ; \
     done \
     && gpg --batch --verify /usr/local/bin/tini.asc /usr/local/bin/tini \
+    && gpgconf --kill all \
     && rm -r "$GNUPGHOME" /usr/local/bin/tini.asc \
     && chmod +x /usr/local/bin/tini \
     && tini -h \
-    && apt-get purge -y --auto-remove wget
+    && apt-get purge -y --auto-remove $fetchDeps
 
-# Support for RabbitMQ
+# Support for RabbitMQ and GeoIP
 RUN set -x \
     && apt-get update && apt-get install -y --no-install-recommends make && rm -rf /var/lib/apt/lists/* \
-    && pip install librabbitmq==1.6.1 \
+    && pip install librabbitmq==1.6.1 maxminddb==1.4.1 \
     && python -c 'import librabbitmq' \
+    && python -c 'import maxminddb' \
     && apt-get purge -y --auto-remove make
 
 ARG SENTRY_BUILD=master
 ENV SENTRY_BUILD $SENTRY_BUILD
 
 RUN [ "$SENTRY_BUILD" != '' ] \
-    && export NODE_VERSION=8.10.0 \
+    # Install node to build assets
+    && export NODE_VERSION=8.15.1 \
     && export YARN_VERSION=1.13.0 \
     && export GNUPGHOME="$(mktemp -d)" \
     && export NPM_CONFIG_CACHE="$(mktemp -d)" \
     && export YARN_CACHE_FOLDER="$(mktemp -d)" \
+    && buildDeps=" \
+        make \
+        g++ \
+        dirmngr \
+        gnupg \
+        wget \
+        patch \
+    " \
+    && apt-get update && apt-get install -y --no-install-recommends $buildDeps && rm -rf /var/lib/apt/lists/* \
+    # gpg keys listed at https://github.com/nodejs/node
     && set -ex \
     && for key in \
       94AE36675C464D64BAFA68DD7434390BDBE9B9C5 \
@@ -97,11 +121,11 @@ RUN [ "$SENTRY_BUILD" != '' ] \
       gpg --batch --keyserver hkp://pgp.mit.edu:80 --recv-keys "$key" ; \
     done \
     && mkdir -p /usr/local/node && PATH=/usr/local/node/bin:$PATH \
-    && apt-get update && apt-get install -y --no-install-recommends make g++ wget patch \
     && rm -rf /var/lib/apt/lists/* \
     && wget "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.gz" \
     && wget "https://nodejs.org/dist/v$NODE_VERSION/SHASUMS256.txt.asc" \
     && gpg --batch --verify SHASUMS256.txt.asc \
+    && gpgconf --kill all \
     && grep " node-v$NODE_VERSION-linux-x64.tar.gz\$" SHASUMS256.txt.asc | sha256sum -c - \
     && tar -xzf "node-v$NODE_VERSION-linux-x64.tar.gz" -C /usr/local/node --strip-components=1 \
     && rm -r "$GNUPGHOME" "node-v$NODE_VERSION-linux-x64.tar.gz" SHASUMS256.txt.asc \
@@ -117,7 +141,7 @@ RUN [ "$SENTRY_BUILD" != '' ] \
     && pip install git+https://github.com/getsentry/sentry-plugins.git \
     && rm -r "$NPM_CONFIG_CACHE" "$YARN_CACHE_FOLDER" \
     && rm -rf /usr/local/node \
-    && apt-get purge -y --auto-remove make g++ wget patch \
+    && apt-get purge -y --auto-remove $buildDeps \
     && rm -rf /usr/src/sentry
 
 ENV SENTRY_CONF=/etc/sentry \
